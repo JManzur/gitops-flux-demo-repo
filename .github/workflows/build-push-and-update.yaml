@@ -1,4 +1,4 @@
-name: Docker image build and publish
+name: Docker Image build push and update
 
 on:
   push:
@@ -14,10 +14,11 @@ permissions:
 env:
   IMAGE_NAME: hello-app
   AWS_REGION: "us-east-1"
-  AWS_ACCOUNT_ID: "PLACEHOLDER"
+  AWS_ACCOUNT_ID: "PLACE_HOLDER"
   OIDC_ROLE_NAME: "github-actions-ecr-full-access"
   DOCKERFILE_PATH: "app/"
   K8S_MANIFESTS_PATH: "k8s_manifest/"
+  CURRENT_IMAGE_URI: "jmanzur/hello-app:latest"
 
 jobs:
   docker-build-and-push:
@@ -76,10 +77,10 @@ jobs:
 
       - name: Update the Kubernetes manifest with the new image URI
         env:
-          IMAGE_URI: ${{needs.docker-build-and-push.outputs.IMAGE_URI}}
+          NEW_IMAGE_URI: ${{needs.docker-build-and-push.outputs.IMAGE_URI}}
         run: |
           cd ${{ env.K8S_MANIFESTS_PATH }}
-          kustomize edit set image jmanzur/hello-app:latest=$IMAGE_URI
+          kustomize edit set image ${{ env.CURRENT_IMAGE_URI }}=$NEW_IMAGE_URI
 
       - name: Push the updated Kubernetes manifest to the repository
         run: |
