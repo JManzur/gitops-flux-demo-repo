@@ -1,0 +1,90 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'OIDC Role for Github Actions'
+Parameters:
+  pClientId:
+    Description: OIDC Audience.
+    Default: sts.amazonaws.com
+    Type: String
+  pUrl:
+    Description: URL of the OIDC provider to trust.
+    Default: https://token.actions.githubusercontent.com
+    Type: String
+  pThumbprintList:
+    Description: Github thumbprint, value from following https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
+    Default: 1b511abead59c6ce207077c0bf0e0043b1382612
+    Type: String
+  pAllowedRepositories:
+    Description: Organization/Repository that can assume the role, in the form of repo:octo-org/octo-repo:*
+    Type: CommaDelimitedList
+  pRoleName:
+    Description: Name of the OIDC Role
+    Default: github-actions-ecr-full-access
+    Type: String
+  pCreatedBy:
+    Description: Value for the CreatedBy tag
+    Default: user@mail.com
+    Type: String
+  pManagedBy:
+    Description: Value for the ManagedBy tag
+    Default: CloudFormation
+    Type: String
+  pDeployOidcProvider:
+    Description: Flag to deploy the OIDC Provider. Set to 'true' to deploy, 'false' to skip.
+    Default: true
+    AllowedValues:
+      - true
+      - false
+    Type: String
+
+Conditions:
+  DeployOidcProvider: !Equals [!Ref pDeployOidcProvider, "true"]
+
+Resources:
+  rOidcProvider:
+    Condition: DeployOidcProvider
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      ClientIdList:
+        - !Ref pClientId
+      ThumbprintList:
+        - !Ref pThumbprintList
+      Url: !Ref pUrl
+      Tags: 
+        - Key: CreatedBy
+          Value: !Ref pCreatedBy
+        - Key: ManagedBy
+          Value: !Ref pManagedBy
+
+  rOidcRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Ref pRoleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Federated: !If
+                - DeployOidcProvider
+                - !Ref rOidcProvider
+                - !Sub 'arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Ref pAllowedRepositories
+              StringEquals:
+                token.actions.githubusercontent.com:aud: !Ref pClientId
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+      Tags:
+        - Key: CreatedBy
+          Value: !Ref pCreatedBy
+        - Key: ManagedBy
+          Value: !Ref pManagedBy
+
+Outputs:
+  OidcRoleArn:
+    Description: ARN of the OIDC Role
+    Value: !GetAtt rOidcRole.Arn
+    Export:
+      Name: OidcRoleArn
